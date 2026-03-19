@@ -5,7 +5,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CartProvider } from './src/store/CartContext';
-import CartScreen from './src/screens/CartScreen';
+import HomeScreen from './src/screens/HomeScreen';
 import ScannerScreen from './src/screens/ScannerScreen';
 
 const Tab = createBottomTabNavigator();
@@ -18,15 +18,16 @@ export default function App() {
           <Tab.Navigator
             screenOptions={{
               tabBarHideOnKeyboard: true,
-              tabBarActiveTintColor: '#16a34a',
+              tabBarActiveTintColor: '#14532D',
             }}
           >
              <Tab.Screen 
-              name="Cart" 
-              component={CartScreen} 
+              name="Home" 
+              component={HomeScreen} 
               options={{
+                headerShown: false,
                 title: 'Command Center',
-                tabBarIcon: ({color, size}) => <MaterialCommunityIcons name="cart-outline" size={size} color={color} />
+                tabBarIcon: ({color, size}) => <MaterialCommunityIcons name="view-dashboard-outline" size={size} color={color} />
               }}
             />
             <Tab.Screen 

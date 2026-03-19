@@ -2,12 +2,11 @@ import * as React from 'react';
 import { useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Modal, TextInput, StyleSheet } from 'react-native';
 import { useCart } from '../store/CartContext';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { injectMockData } from '../utils/mockData';
 
 export default function CartScreen() {
-  const { cartItems, totalBachat, currentTotal, budget, setBudget, updateQuantity, clearCart, addToCart } = useCart();
+  const { cartItems, totalBachat, currentTotal, budget, setBudget, updateQuantity, clearCart } = useCart();
   const navigation = useNavigation<any>();
   
   const [showBudgetModal, setShowBudgetModal] = useState(false);
@@ -43,7 +42,7 @@ export default function CartScreen() {
       <View className="flex-row justify-between items-center px-6 pt-6 pb-2">
         <Text className="text-3xl font-black text-gray-900 tracking-tighter">My Cart</Text>
         <TouchableOpacity onPress={clearCart}>
-          <MaterialCommunityIcons name="trash-can-outline" size={28} color="#ef4444" />
+          <Feather name="trash-2" size={28} color="#EF4444" />
         </TouchableOpacity>
       </View>
 
@@ -56,7 +55,7 @@ export default function CartScreen() {
                 <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Budget Limit</Text>
                 <View className="flex-row items-center">
                   <Text className="text-xl font-black text-gray-800">₹{budget}</Text>
-                  <MaterialCommunityIcons name="pencil" size={14} color="#9ca3af" style={{ marginLeft: 4 }} />
+                  <Feather name="edit-2" size={14} color="#9ca3af" style={{ marginLeft: 4 }} />
                 </View>
               </View>
             </TouchableOpacity>
@@ -81,10 +80,11 @@ export default function CartScreen() {
           data={cartItems}
           keyExtractor={item => item.id}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 150 }}
+          contentContainerStyle={{ paddingBottom: 20 }}
+          style={{ flex: 1 }}
           ListEmptyComponent={
             <View className="items-center py-20">
-              <MaterialCommunityIcons name="cart-variant" size={64} color="#e5e7eb" />
+              <Feather name="shopping-cart" size={64} color="#e5e7eb" />
               <Text className="text-center text-gray-400 font-bold mt-4 text-lg">Your cart is empty.</Text>
             </View>
           }
@@ -95,7 +95,7 @@ export default function CartScreen() {
                 <View className="flex-row items-center">
                    <View className="bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
                     <Text className="text-emerald-700 font-black text-[10px]">SAVE ₹{(item.savings/item.quantity).toFixed(2)}</Text>
-                  </View>
+                   </View>
                   <Text className="text-gray-400 text-xs ml-3 font-bold line-through">₹{item.mrp}</Text>
                 </View>
 
@@ -103,16 +103,18 @@ export default function CartScreen() {
                 <View className="flex-row items-center mt-4 bg-gray-50 self-start rounded-2xl p-1 border border-gray-100">
                   <TouchableOpacity 
                     onPress={() => updateQuantity(item.id, -1)}
-                    className="w-10 h-10 items-center justify-center bg-white rounded-xl shadow-sm border border-gray-100"
+                    style={{ backgroundColor: '#F3F4F6' }}
+                    className="w-12 h-12 items-center justify-center rounded-2xl shadow-sm border border-gray-100"
                   >
-                    <MaterialCommunityIcons name="minus" size={20} color="#374151" />
+                    <Feather name="minus" size={16} color="#000000" />
                   </TouchableOpacity>
                   <Text className="mx-4 text-lg font-black text-gray-800">{item.quantity}</Text>
                   <TouchableOpacity 
                     onPress={() => updateQuantity(item.id, 1)}
-                    className="w-10 h-10 items-center justify-center bg-white rounded-xl shadow-sm border border-gray-100"
+                    style={{ backgroundColor: '#F3F4F6' }}
+                    className="w-12 h-12 items-center justify-center rounded-2xl shadow-sm border border-gray-100"
                   >
-                    <MaterialCommunityIcons name="plus" size={20} color="#374151" />
+                    <Feather name="plus" size={16} color="#000000" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -126,27 +128,23 @@ export default function CartScreen() {
         />
       </View>
 
-      {/* STICKY footer FOR BACHAT */}
-      <View className="absolute bottom-28 left-6 right-6">
-        <View className="bg-emerald-600 p-4 rounded-3xl shadow-xl flex-row justify-between items-center border-2 border-white">
-          <View>
-             <Text className="text-emerald-100 font-black text-[9px] uppercase tracking-widest">Total Bachat</Text>
-             <Text className="text-2xl font-black text-white">₹{totalBachat}</Text>
-          </View>
-          <View className="bg-emerald-500/50 px-3 py-1 rounded-full">
-            <Text className="text-white font-black text-[10px]">SAVED! 🎉</Text>
-          </View>
+      {/* FIXED FOOTER */}
+      <View className="bg-white px-6 py-5 border-t border-gray-100 flex-row justify-between items-center shadow-2xl">
+        {/* Left: Bachat Banner */}
+        <View className="bg-emerald-600 px-6 py-4 rounded-[28px] flex-1 mr-6 shadow-lg border-b-2 border-emerald-800">
+          <Text className="text-emerald-100 font-black text-[9px] uppercase tracking-widest">Total Bachat</Text>
+          <Text className="text-2xl font-black text-white">₹{totalBachat}</Text>
         </View>
-      </View>
 
-      {/* FAB */}
-      <TouchableOpacity 
-        className="absolute bottom-8 right-8 w-20 h-20 bg-blue-600 rounded-[30px] shadow-2xl items-center justify-center border-4 border-white"
-        activeOpacity={0.8}
-        onPress={() => navigation.navigate('Scanner')}
-      >
-        <MaterialCommunityIcons name="barcode-scan" size={36} color="white" />
-      </TouchableOpacity>
+        {/* Right: Scanner FAB */}
+        <TouchableOpacity 
+          className="w-20 h-20 bg-blue-600 rounded-[30px] shadow-2xl items-center justify-center border-4 border-white"
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('Scanner')}
+        >
+          <Feather name="maximize" size={32} color="white" />
+        </TouchableOpacity>
+      </View>
 
       {/* BUDGET MODAL */}
       <Modal visible={showBudgetModal} transparent animationType="fade">
@@ -165,7 +163,7 @@ export default function CartScreen() {
             />
 
             <View className="flex-row space-x-4">
-               <TouchableOpacity 
+              <TouchableOpacity 
                 className="flex-1 p-5 rounded-2xl items-center"
                 onPress={() => setShowBudgetModal(false)}
               >
@@ -173,7 +171,7 @@ export default function CartScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity 
-                className="flex-2 bg-emerald-600 p-5 rounded-[24px] items-center shadow-lg shadow-emerald-200"
+                className="bg-emerald-600 p-5 rounded-[24px] px-8 items-center shadow-lg"
                 onPress={handleUpdateBudget}
               >
                 <Text className="text-white text-lg font-black uppercase">Save Limit</Text>

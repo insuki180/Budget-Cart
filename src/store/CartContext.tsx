@@ -18,6 +18,7 @@ export interface CartItem {
 interface CartContextType {
   cartItems: CartItem[];
   addToCart: (item: CartItem) => void;
+  addMultipleToCart: (items: CartItem[]) => void;
   updateQuantity: (id: string, delta: number) => void;
   clearCart: () => void;
   budget: number;
@@ -49,7 +50,13 @@ export const CartProvider: React.FC<{children: React.ReactNode}> = ({ children }
   };
 
   const addToCart = async (newItem: CartItem) => {
-    const existingIndex = cartItems.findIndex((i: CartItem) => i.barcode === newItem.barcode && i.barcode);
+    // BUG FIX: Merge only if barcode AND sellingPrice match
+    const existingIndex = cartItems.findIndex((i: CartItem) => 
+      i.barcode === newItem.barcode && 
+      i.sellingPrice === newItem.sellingPrice && 
+      i.barcode !== null
+    );
+
     let updated;
     if(existingIndex >= 0) {
       updated = [...cartItems];
@@ -64,15 +71,51 @@ export const CartProvider: React.FC<{children: React.ReactNode}> = ({ children }
     await saveActiveCart(updated);
   };
 
+  const addMultipleToCart = async (newItems: CartItem[]) => {
+    let updated = [...cartItems];
+
+    newItems.forEach(newItem => {
+      const existingIndex = updated.findIndex((i: CartItem) => 
+        i.barcode === newItem.barcode && 
+        i.sellingPrice === (newItem.sellingPrice || 0) &&
+        i.barcode !== null
+      );
+
+      if (existingIndex >= 0) {
+        updated[existingIndex].quantity += newItem.quantity;
+        const calc = calculateItemTotal(updated[existingIndex].mrp, updated[existingIndex].sellingPrice, updated[existingIndex].quantity, updated[existingIndex].offer);
+        updated[existingIndex].finalTotal = calc.finalTotal;
+        updated[existingIndex].savings = calc.totalSavings;
+      } else {
+        const normalized = {
+          ...newItem,
+          mrp: newItem.mrp || 0,
+          sellingPrice: newItem.sellingPrice || 0,
+          savings: newItem.savings || 0,
+          finalTotal: newItem.finalTotal || 0,
+          offer: newItem.offer || null,
+        };
+        updated.push(normalized);
+      }
+    });
+
+    setCartItems(updated);
+    await saveActiveCart(updated);
+  };
+
   const updateQuantity = async (id: string, delta: number) => {
-    const updated = cartItems.map(item => {
+    let updated = cartItems.map(item => {
       if (item.id === id) {
-        const newQty = Math.max(1, item.quantity + delta);
-        const calc = calculateItemTotal(item.mrp, item.sellingPrice, newQty, item.offer);
+        const newQty = item.quantity + delta;
+        const calc = calculateItemTotal(item.mrp, item.sellingPrice, Math.max(0, newQty), item.offer);
         return { ...item, quantity: newQty, finalTotal: calc.finalTotal, savings: calc.totalSavings };
       }
       return item;
     });
+
+    // Remove items with quantity <= 0
+    updated = updated.filter(item => item.quantity > 0);
+
     setCartItems(updated);
     await saveActiveCart(updated);
   };
@@ -86,7 +129,7 @@ export const CartProvider: React.FC<{children: React.ReactNode}> = ({ children }
   const totalBachat = cartItems.reduce((acc: number, item: CartItem) => acc + item.savings, 0);
 
   return (
-    <CartContext.Provider value={{ cartItems, addToCart, updateQuantity, clearCart, budget, setBudget, currentTotal, totalBachat }}>
+    <CartContext.Provider value={{ cartItems, addToCart, addMultipleToCart, updateQuantity, clearCart, budget, setBudget, currentTotal, totalBachat }}>
       {children}
     </CartContext.Provider>
   );

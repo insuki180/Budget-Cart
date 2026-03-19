@@ -6,7 +6,7 @@ import { getProductMemory, saveProductMemory } from '../store/storage';
 import { useCart } from '../store/CartContext';
 import { calculateItemTotal } from '../utils/pricing';
 import { fetchProductByBarcode, ExternalProduct } from '../utils/api';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
 const SCAN_AREA_SIZE = 280;
@@ -17,16 +17,16 @@ export default function ScannerScreen() {
   const [isPaused, setIsPaused] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showSheet, setShowSheet] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
   const [currentBarcode, setCurrentBarcode] = useState('');
   
-  // External Product Preview
-  const [previewProduct, setPreviewProduct] = useState<ExternalProduct | null>(null);
+  // External Product Data Cache for the Modal
+  const [modalProduct, setModalProduct] = useState<ExternalProduct | null>(null);
 
-  // Form State (Manual Entry)
+  // Form State (Verification UI)
   const [name, setName] = useState('');
   const [mrp, setMrp] = useState('');
   const [price, setPrice] = useState('');
+  const [priceError, setPriceError] = useState('');
   
   const { addToCart } = useCart();
 
@@ -46,75 +46,90 @@ export default function ScannerScreen() {
 
     setScanned(true);
     setCurrentBarcode(data);
+    setPriceError(''); // Clear previous error
     
     // 1. Check Memory Engine (Local Cache)
     const memory = await getProductMemory(data);
     if (memory) {
-      const pricing = calculateItemTotal(memory.mrp, memory.lastSellingPrice, 1);
-      addToCart({
-        id: Math.random().toString(),
-        barcode: data,
+      setName(memory.name);
+      setMrp(memory.mrp.toString());
+      setPrice(memory.lastSellingPrice.toString());
+      setModalProduct({
         name: memory.name,
-        mrp: memory.mrp,
-        sellingPrice: memory.lastSellingPrice,
-        quantity: 1,
-        savings: pricing.totalSavings,
-        offer: { type: 'none' },
-        finalTotal: pricing.finalTotal
+        brand: '',
+        source: 'Local Memory',
+        found: true,
+        barcode: data,
+        image: ''
       });
-      Alert.alert("Added to Cart!", `${memory.name} was auto-added.`, [
-        { text: 'OK', onPress: () => setScanned(false) }
-      ]);
+      setShowSheet(true);
       return;
     }
 
-    // 2. Not in Memory -> Fetch from Global API (CAPTURE-FIRST)
+    // 2. Not in Memory -> Fetch from Global API
     setLoading(true);
     try {
       const external = await fetchProductByBarcode(data);
-      if (external.found) {
-        setPreviewProduct(external);
-        setShowPreview(true);
+      if (external && external.found) {
+        setModalProduct(external);
+        setName(external.name);
+        setMrp('');
+        setPrice('');
+        setShowSheet(true);
       } else {
-        // 3. Not found anywhere -> Forces Manual Entry flow
+        // 3. Not found anywhere -> Empty Manual Entry flow
+        setModalProduct(null);
+        setName('');
+        setMrp('');
+        setPrice('');
         setShowSheet(true);
       }
     } catch (e) {
+      setModalProduct(null);
       setShowSheet(true); // Fallback to manual on error
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddPreviewToCart = () => {
-    if (!previewProduct) return;
-    setName(previewProduct.name);
-    setShowPreview(false);
-    setShowSheet(true); // Open sheet to enter Price & MRP
-  };
-
   const handleManualAdd = async () => {
-    if(!name || !mrp || !price) return;
+    const numPrice = parseFloat(price) || 0;
+    const numMrp = parseFloat(mrp) || 0;
+
+    if(!name || !mrp || !price) {
+      Alert.alert("Missing Info", "Please enter product name, MRP, and Today's Price.");
+      return;
+    }
     
-    const parsedMrp = parseFloat(mrp);
-    const parsedPrice = parseFloat(price);
-    
+    if (isNaN(numMrp) || isNaN(numPrice)) {
+      Alert.alert("Invalid Price", "Please enter valid numbers for MRP and Price.");
+      return;
+    }
+
+    if (numPrice > numMrp) {
+      setPriceError("Today's price cannot exceed the MRP.");
+      return;
+    }
+
+    setPriceError(''); // Clear error if it passes
+
+    // Update Local Memory (MRPs/Prices can change, so we save the latest)
     await saveProductMemory(currentBarcode, {
       barcode: currentBarcode,
       name,
-      mrp: parsedMrp,
-      lastSellingPrice: parsedPrice,
-      history: [{ date: new Date().toISOString(), price: parsedPrice }],
+      mrp: numMrp,
+      lastSellingPrice: numPrice,
+      history: [{ date: new Date().toISOString(), price: numPrice }],
       associatedPromos: []
     });
 
-    const pricing = calculateItemTotal(parsedMrp, parsedPrice, 1);
+    const pricing = calculateItemTotal(numMrp, numPrice, 1);
     addToCart({
-      id: Math.random().toString(),
+      id: Math.random().toString(), // Unique ID for each cart entry
       barcode: currentBarcode,
       name,
-      mrp: parsedMrp,
-      sellingPrice: parsedPrice,
+      mrp: numMrp,
+      sellingPrice: numPrice,
       quantity: 1,
       savings: pricing.totalSavings,
       offer: { type: 'none' },
@@ -126,10 +141,10 @@ export default function ScannerScreen() {
 
   const resetScanner = () => {
     setShowSheet(false);
-    setShowPreview(false);
     setScanned(false);
     setName(''); setMrp(''); setPrice('');
-    setPreviewProduct(null);
+    setModalProduct(null);
+    setPriceError('');
   };
 
   if (hasPermission === null) return <View className="flex-1 bg-black" />;
@@ -139,11 +154,14 @@ export default function ScannerScreen() {
     <View className="flex-1 bg-black">
       <CameraView 
         style={StyleSheet.absoluteFillObject}
-        barcodeScannerSettings={{ barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e"] }}
+        barcodeScannerSettings={{ 
+          barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e"]
+        }}
         onBarcodeScanned={scanned || isPaused ? undefined : handleBarCodeScanned}
-        zoom={0}
+        zoom={0.1}
         enableTorch={false}
-        autofocus="on"
+        autofocus="off" // "off" often performs better on Android for batch scanning if zoom is fixed
+        responsiveOrientationWhenOrientationLocked={true}
       />
       
       {/* PERFECTLY CENTERED VIEWFINDER */}
@@ -163,103 +181,92 @@ export default function ScannerScreen() {
          
          <View className="mt-10 bg-black/60 px-8 py-4 rounded-[24px] border border-white/10 items-center">
            <Text className="text-white font-black text-sm uppercase tracking-[4px]">Align Barcode</Text>
-           <Text className="text-gray-400 text-[10px] font-bold mt-1 uppercase">Automated Price Discovery</Text>
+           <Text className="text-gray-400 text-[10px] font-bold mt-1 uppercase">Manual Price Verification Required</Text>
          </View>
       </View>
 
       {loading && (
         <View className="absolute inset-0 items-center justify-center bg-black/70">
           <ActivityIndicator size="large" color="#10b981" />
-          <Text className="mt-6 text-white font-black text-xl tracking-tighter">Analyzing Product...</Text>
+          <Text className="mt-6 text-white font-black text-xl tracking-tighter">Identifying Product...</Text>
         </View>
       )}
 
-      {/* API PREVIEW MODAL */}
-      <Modal visible={showPreview} transparent animationType="slide">
-        <View className="flex-1 justify-end bg-black/40">
-          <View className="bg-white rounded-t-[48px] p-8 items-center border-t-4 border-emerald-500 shadow-2xl">
-            {previewProduct?.image ? (
-              <Image source={{ uri: previewProduct.image }} className="w-40 h-40 rounded-3xl mb-6 shadow-lg" />
-            ) : (
-              <View className="w-40 h-40 bg-gray-100 rounded-3xl mb-6 items-center justify-center">
-                <MaterialCommunityIcons name="package-variant" size={64} color="#d1d5db" />
-              </View>
-            )}
-            <Text className="text-2xl font-black text-gray-900 text-center mb-1 leading-tight">{previewProduct?.name}</Text>
-            <Text className="text-gray-400 font-bold uppercase text-[10px] tracking-widest mb-8">{previewProduct?.brand || 'Unknown Brand'}</Text>
-
-            <TouchableOpacity 
-              className="w-full bg-blue-600 p-6 rounded-[32px] items-center shadow-2xl border-b-4 border-blue-800"
-              activeOpacity={0.8}
-              onPress={handleAddPreviewToCart}
-            >
-              <Text className="text-white text-xl font-black uppercase tracking-widest">Add to Cart</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity className="mt-6 p-2" onPress={resetScanner}>
-              <Text className="text-gray-400 font-bold uppercase text-xs tracking-widest text-center">Discard Scan</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* MANUAL ENTRY MODAL */}
+      {/* VERIFICATION MODAL (Unified Flow) */}
       <Modal visible={showSheet} transparent animationType="slide">
         <View className="flex-1 justify-end bg-black/60">
           <View className="bg-white rounded-t-[48px] p-8 shadow-2xl border-t-4 border-blue-500">
             <View className="flex-row justify-between items-start mb-6">
-               <View>
-                  <Text className="text-3xl font-black text-gray-900 tracking-tighter">
-                    {previewProduct ? 'Price Tag' : 'New Discovery'}
+               <View className="flex-1">
+                  <Text className="text-3xl font-black text-gray-900 tracking-tighter" numberOfLines={1}>
+                    {modalProduct ? 'Verify Price' : 'New Discovery'}
                   </Text>
                   <Text className="text-gray-400 font-bold text-[10px] uppercase mt-1 tracking-widest">Barcode: {currentBarcode}</Text>
                </View>
-               <TouchableOpacity onPress={resetScanner} className="bg-gray-100 p-2 rounded-full">
-                  <MaterialCommunityIcons name="close" size={24} color="#9ca3af" />
+               <TouchableOpacity onPress={resetScanner} className="bg-gray-100 p-2 rounded-full ml-4">
+                  <Feather name="x" size={24} color="#9ca3af" />
                </TouchableOpacity>
             </View>
             
-            <View className="space-y-4">
-              <View>
-                 <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Product Identity</Text>
+            <View className="mb-6 items-center flex-row bg-gray-50 p-4 rounded-3xl border border-gray-100">
+               {modalProduct?.image ? (
+                 <Image source={{ uri: modalProduct.image }} className="w-16 h-16 rounded-2xl mr-4" />
+               ) : (
+                 <View className="w-16 h-16 bg-gray-200 rounded-2xl mr-4 items-center justify-center">
+                    <Feather name="box" size={32} color="#9ca3af" />
+                 </View>
+               )}
+               <View className="flex-1">
+                 <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Product Identity</Text>
                  <TextInput 
-                  className="bg-gray-50 p-5 rounded-2xl text-lg font-bold text-gray-800 border border-gray-100"
-                  placeholder="Enter Item Name" 
+                  className="text-lg font-bold text-gray-800 p-0"
+                  placeholder="Item Name" 
                   value={name} 
                   onChangeText={setName} 
                 />
-              </View>
+               </View>
+            </View>
 
-              <View className="flex-row space-x-4">
-                <View className="flex-1">
-                  <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">MRP Total</Text>
-                  <TextInput 
-                    className="bg-gray-50 p-5 rounded-2xl text-lg font-bold text-gray-800 border border-gray-100"
-                    placeholder="₹ 0.00" 
-                    keyboardType="numeric" 
-                    value={mrp} 
-                    onChangeText={setMrp} 
-                  />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Today's Price</Text>
-                  <TextInput 
-                    className="bg-gray-50 p-5 rounded-2xl text-lg font-bold text-gray-800 border border-gray-100"
-                    placeholder="₹ 0.00" 
-                    keyboardType="numeric" 
-                    value={price} 
-                    onChangeText={setPrice} 
-                  />
-                </View>
+            <View className="flex-row space-x-4 mb-4">
+              <View className="flex-1">
+                <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">MRP (Max Retail Price)</Text>
+                <TextInput 
+                  className="bg-gray-50 p-5 rounded-2xl text-lg font-bold text-gray-800 border border-gray-100"
+                  placeholder="₹ 0.00" 
+                  keyboardType="numeric" 
+                  value={mrp} 
+                  onChangeText={setMrp} 
+                />
+              </View>
+              <View className="flex-1">
+                <Text className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Today's Store Price</Text>
+                <TextInput 
+                  className="bg-emerald-50 p-5 rounded-2xl text-lg font-bold text-emerald-700 border border-emerald-100"
+                  placeholder="₹ 0.00" 
+                  keyboardType="numeric" 
+                  value={price} 
+                  onChangeText={setPrice} 
+                />
               </View>
             </View>
 
+            {priceError ? (
+              <View className="mb-6 items-center flex-row bg-rose-50 p-4 rounded-2xl border border-rose-100">
+                <Feather name="alert-circle" size={16} color="#E11D48" />
+                <Text className="text-rose-600 font-bold text-xs ml-2">{priceError}</Text>
+              </View>
+            ) : null}
+
             <TouchableOpacity 
-              className="w-full bg-emerald-600 p-6 rounded-[32px] items-center shadow-2xl mt-12 border-b-4 border-emerald-800"
+              className="w-full bg-emerald-600 p-6 rounded-[32px] items-center shadow-2xl border-b-4 border-emerald-800"
               activeOpacity={0.8}
               onPress={handleManualAdd}
             >
-              <Text className="text-white text-xl font-black uppercase tracking-widest">Verify & Add</Text>
+              <Text className="text-white text-xl font-black uppercase tracking-widest">Verify & Add to Cart</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity className="mt-6 p-2" onPress={resetScanner}>
+              <Text className="text-gray-400 font-bold uppercase text-xs tracking-widest text-center">Discard Scan</Text>
             </TouchableOpacity>
           </View>
         </View>

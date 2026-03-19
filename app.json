@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "budget-cart-app",
+    "name": "BudgetCart",
     "slug": "budget-cart-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,20 +15,36 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.yourdomain.budgetcart",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-barcode-scanner",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow BudgetCart to scan barcodes."
+        }
+      ],
       "expo-asset",
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "17ab0854-eded-44d3-84cb-8afaf8ad3359"
+      }
+    }
   }
 }
